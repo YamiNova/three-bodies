@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>三体运动模型</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #111827 0%, #020617 70%);
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .panel {
+      position: fixed;
+      left: 20px;
+      top: 20px;
+      width: 300px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    .panel h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .panel p {
+      margin: 6px 0 14px;
+      color: #cbd5e1;
+      line-height: 1.5;
+      font-size: 13px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+    }
+
+    label {
+      display: grid;
+      gap: 4px;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: #38bdf8;
+      color: #082f49;
+      font-weight: 700;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+    }
+
+    .value {
+      color: #7dd3fc;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="space"></canvas>
+
+  <section class="panel">
+    <h1>三体运动模型</h1>
+    <p>
+      这是一个简化的牛顿引力三体模拟。三个天体互相吸引，系统通常会呈现混沌轨道。
+    </p>
+
+    <div class="controls">
+      <label>
+        时间步长 dt：<span class="value" id="dtValue">0.016</span>
+        <input id="dt" type="range" min="0.002" max="0.05" step="0.001" value="0.016" />
+      </label>
+
+      <label>
+        引力常数 G：<span class="value" id="gValue">1.00</span>
+        <input id="gravity" type="range" min="0.1" max="5" step="0.1" value="1" />
+      </label>
+
+      <label>
+        轨迹长度：<span class="value" id="trailValue">650</span>
+        <input id="trail" type="range" min="80" max="1800" step="10" value="650" />
+      </label>
+
+      <button id="reset">重置系统</button>
+    </div>
+  </section>
+
+  <script>
+    const canvas = document.getElementById("space");
+    const ctx = canvas.getContext("2d");
+
+    const dtSlider = document.getElementById("dt");
+    const gSlider = document.getElementById("gravity");
+    const trailSlider = document.getElementById("trail");
+    const dtValue = document.getElementById("dtValue");
+    const gValue = document.getElementById("gValue");
+    const trailValue = document.getElementById("trailValue");
+    const resetButton = document.getElementById("reset");
+
+    let width = 0;
+    let height = 0;
+    let bodies = [];
+    let G = Number(gSlider.value);
+    let dt = Number(dtSlider.value);
+    let maxTrail = Number(trailSlider.value);
+
+    const softening = 80; // 防止距离过小时加速度趋近无穷
+    const scale = 180;
+
+    function resize() {
+      width = canvas.width = window.innerWidth * devicePixelRatio;
+      height = canvas.height = window.innerHeight * devicePixelRatio;
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    }
+
+    function createBody({ x, y, vx, vy, mass, radius, color }) {
+      return {
+        x,
+        y,
+        vx,
+        vy,
+        mass,
+        radius,
+        color,
+        trail: []
+      };
+    }
+
+    function resetSystem() {
+      bodies = [
+        createBody({
+          x: -0.75,
+          y: 0,
+          vx: 0.32,
+          vy: 0.58,
+          mass: 1.2,
+          radius: 11,
+          color: "#f87171"
+        }),
+        createBody({
+          x: 0.75,
+          y: 0,
+          vx: 0.32,
+          vy: 0.58,
+          mass: 1.2,
+          radius: 11,
+          color: "#60a5fa"
+        }),
+        createBody({
+          x: 0,
+          y: 0.9,
+          vx: -0.64,
+          vy: -1.16,
+          mass: 1.2,
+          radius: 11,
+          color: "#facc15"
+        })
+      ];
+    }
+
+    function updatePhysics() {
+      const accelerations = bodies.map(() => ({ ax: 0, ay: 0 }));
+
+      for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+          const a = bodies[i];
+          const b = bodies[j];
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const distSq = dx * dx + dy * dy + softening / (scale * scale);
+          const dist = Math.sqrt(distSq);
+          const force = G / distSq;
+
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          accelerations[i].ax += force * b.mass * nx;
+          accelerations[i].ay += force * b.mass * ny;
+          accelerations[j].ax -= force * a.mass * nx;
+          accelerations[j].ay -= force * a.mass * ny;
+        }
+      }
+
+      for (let i = 0; i < bodies.length; i++) {
+        const body = bodies[i];
+        body.vx += accelerations[i].ax * dt;
+        body.vy += accelerations[i].ay * dt;
+        body.x += body.vx * dt;
+        body.y += body.vy * dt;
+
+        body.trail.push({ x: body.x, y: body.y });
+        if (body.trail.length > maxTrail) body.trail.shift();
+      }
+    }
+
+    function toScreen(point) {
+      return {
+        x: window.innerWidth / 2 + point.x * scale,
+        y: window.innerHeight / 2 + point.y * scale
+      };
+    }
+
+    function drawStars() {
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      for (let i = 0; i < 140; i++) {
+        const x = (i * 9973) % window.innerWidth;
+        const y = (i * 7919) % window.innerHeight;
+        const r = ((i * 37) % 100) / 100 + 0.3;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = "#e5e7eb";
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      drawStars();
+
+      for (const body of bodies) {
+        ctx.beginPath();
+        for (let i = 0; i < body.trail.length; i++) {
+          const p = toScreen(body.trail[i]);
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.strokeStyle = body.color;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      for (const body of bodies) {
+        const p = toScreen(body);
+
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, body.radius * 4);
+        glow.addColorStop(0, body.color);
+        glow.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, body.radius * 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = body.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, body.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function animate() {
+      for (let i = 0; i < 4; i++) updatePhysics();
+      draw();
+      requestAnimationFrame(animate);
+    }
+
+    dtSlider.addEventListener("input", () => {
+      dt = Number(dtSlider.value);
+      dtValue.textContent = dt.toFixed(3);
+    });
+
+    gSlider.addEventListener("input", () => {
+      G = Number(gSlider.value);
+      gValue.textContent = G.toFixed(2);
+    });
+
+    trailSlider.addEventListener("input", () => {
+      maxTrail = Number(trailSlider.value);
+      trailValue.textContent = maxTrail;
+    });
+
+    resetButton.addEventListener("click", resetSystem);
+    window.addEventListener("resize", resize);
+
+    resize();
+    resetSystem();
+    animate();
+  </script>
+</body>
+</html>
