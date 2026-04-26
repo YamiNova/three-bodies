@@ -1,0 +1,57 @@
+
+/* ========================= */
+/* style.css */
+/* ========================= */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #111827 0%, #020617 70%);
+  color: #e5e7eb;
+  font-family: system-ui, sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+.panel {
+  position: fixed;
+  left: 20px;
+  top: 20px;
+  width: 300px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.controls {
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: #38bdf8;
+  font-weight: bold;
+}
+
+.value {
+  color: #7dd3fc;
+}
